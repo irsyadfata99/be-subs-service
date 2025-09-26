@@ -1,9 +1,10 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import db from "../../models";
 import { AppError } from "../middleware/errorHandler";
 import { AuthRequest } from "../middleware/auth";
 import { BillingService } from "../services/billingService";
 import { validateTripayCallback } from "../utils/helpers";
+import logger from "../utils/logger";
 
 const { PlatformInvoice, Client } = db;
 
@@ -63,11 +64,13 @@ export const getInvoices = async (
     const where: any = { client_id: clientId };
     if (status) where.status = status;
 
-    const offset = (Number(page) - 1) * Number(limit);
+    const maxLimit = 100;
+    const validLimit = Math.min(Number(limit), maxLimit);
+    const offset = (Number(page) - 1) * validLimit;
 
     const { count, rows } = await PlatformInvoice.findAndCountAll({
       where,
-      limit: Number(limit),
+      limit: validLimit,
       offset,
       order: [["created_at", "DESC"]],
     });
@@ -79,8 +82,8 @@ export const getInvoices = async (
         pagination: {
           total: count,
           page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(count / Number(limit)),
+          limit: validLimit,
+          totalPages: Math.ceil(count / validLimit),
         },
       },
     });
@@ -142,14 +145,18 @@ export const paymentCallback = async (
   next: NextFunction
 ) => {
   try {
-    // Fix: Cast headers to string
     const callbackSignature =
       (req.headers["x-callback-signature"] as string) || "";
     const jsonBody = JSON.stringify(req.body);
 
+    // Validate signature
     const isValid = validateTripayCallback(jsonBody, callbackSignature);
 
     if (!isValid) {
+      logger.warn("Invalid Tripay callback signature", {
+        ip: req.ip,
+        body: req.body,
+      });
       throw new AppError("Invalid callback signature", 401);
     }
 

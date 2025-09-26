@@ -1,8 +1,12 @@
 import express, { Application } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import { errorHandler } from "./middleware/errorHandler";
+import { apiLimiter } from "./middleware/rateLimiter";
+import { requestLogger } from "./middleware/requestLogger";
 import { CronService } from "./services/cronService";
+import logger from "./utils/logger";
 
 // Import routes
 import authRoutes from "./routes/auth";
@@ -17,15 +21,45 @@ dotenv.config();
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Trust proxy (for rate limiting behind reverse proxy)
+app.set("trust proxy", 1);
+
+// Security middleware
+app.use(
+  helmet({
+    contentSecurityPolicy:
+      process.env.NODE_ENV === "production" ? undefined : false,
+  })
+);
+
+// CORS configuration
+const allowedOrigins =
+  process.env.NODE_ENV === "production"
+    ? [process.env.FRONTEND_URL || "https://yourdomain.com"]
+    : ["http://localhost:3000", "http://localhost:5173"];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Body parsing
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Request logging
+app.use(requestLogger);
+
+// Rate limiting
+app.use("/api/", apiLimiter);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -36,7 +70,20 @@ app.use("/api/dashboard", dashboardRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: "Endpoint not found",
+  });
 });
 
 // Error handler (must be last)
@@ -46,11 +93,46 @@ app.use(errorHandler);
 const cronService = new CronService();
 cronService.startAll();
 
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, closing server gracefully...");
+
+  // Close database connection
+  try {
+    const db = require("../models");
+    await db.sequelize.close();
+    logger.info("Database connection closed");
+  } catch (error) {
+    logger.error("Error closing database", { error });
+  }
+
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received, closing server gracefully...");
+
+  try {
+    const db = require("../models");
+    await db.sequelize.close();
+    logger.info("Database connection closed");
+  } catch (error) {
+    logger.error("Error closing database", { error });
+  }
+
+  process.exit(0);
+});
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`🔗 API: http://localhost:${PORT}`);
+const server = app.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || "development"}`);
+  logger.info(`API: http://localhost:${PORT}`);
+});
+
+// Handle unhandled rejections
+process.on("unhandledRejection", (reason: any) => {
+  logger.error("Unhandled Rejection:", { reason });
 });
 
 export default app;

@@ -4,6 +4,7 @@ import db from "../../models";
 import { WhatsAppService } from "./whatsappService";
 import { BillingService } from "./billingService";
 import { addDays } from "../utils/helpers";
+import logger from "../utils/logger";
 
 const { Client, EndUser, Reminder } = db;
 
@@ -16,56 +17,69 @@ export class CronService {
     this.billingService = new BillingService();
   }
 
-  // Job 1: Daily Reminders (09:00 AM)
   startDailyReminderJob() {
-    cron.schedule("0 9 * * *", async () => {
-      console.log("Running daily reminder job...");
-      await this.sendAllReminders();
-    });
-    console.log("✅ Daily reminder job scheduled at 09:00");
+    cron.schedule(
+      "0 9 * * *",
+      async () => {
+        logger.info("Running daily reminder job...");
+        await this.sendAllReminders();
+      },
+      {
+        timezone: "Asia/Jakarta",
+      }
+    );
+    logger.info("Daily reminder job scheduled at 09:00 WIB");
   }
 
-  // Job 2: Monthly Billing (1st of month, 01:00 AM)
   startMonthlyBillingJob() {
-    cron.schedule("0 1 1 * *", async () => {
-      console.log("Running monthly billing job...");
-      await this.billingService.generateAllMonthlyInvoices();
-    });
-    console.log("✅ Monthly billing job scheduled at 1st 01:00");
+    cron.schedule(
+      "0 1 1 * *",
+      async () => {
+        logger.info("Running monthly billing job...");
+        await this.billingService.generateAllMonthlyInvoices();
+      },
+      {
+        timezone: "Asia/Jakarta",
+      }
+    );
+    logger.info("Monthly billing job scheduled at 1st 01:00 WIB");
   }
 
-  // Job 3: Trial Expiry Check (00:00 AM)
   startTrialExpiryJob() {
-    cron.schedule("0 0 * * *", async () => {
-      console.log("Running trial expiry check...");
-      await this.checkTrialExpiry();
-    });
-    console.log("✅ Trial expiry job scheduled at 00:00");
+    cron.schedule(
+      "0 0 * * *",
+      async () => {
+        logger.info("Running trial expiry check...");
+        await this.checkTrialExpiry();
+      },
+      {
+        timezone: "Asia/Jakarta",
+      }
+    );
+    logger.info("Trial expiry job scheduled at 00:00 WIB");
   }
 
-  // Job 4: Overdue Invoice Check (02:00 AM)
   startOverdueInvoiceJob() {
-    cron.schedule("0 2 * * *", async () => {
-      console.log("Running overdue invoice check...");
-      await this.checkOverdueInvoices();
-    });
-    console.log("✅ Overdue invoice job scheduled at 02:00");
+    cron.schedule(
+      "0 2 * * *",
+      async () => {
+        logger.info("Running overdue invoice check...");
+        await this.checkOverdueInvoices();
+      },
+      {
+        timezone: "Asia/Jakarta",
+      }
+    );
+    logger.info("Overdue invoice job scheduled at 02:00 WIB");
   }
 
   private async sendAllReminders() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // H-3 Reminders
     await this.sendRemindersByType("before_3days", addDays(today, 3));
-
-    // H-1 Reminders
     await this.sendRemindersByType("before_1day", addDays(today, 1));
-
-    // Overdue Reminders (H+1)
     await this.sendRemindersByType("overdue", addDays(today, -1));
-
-    // Update overdue status
     await this.updateOverdueStatus();
   }
 
@@ -113,12 +127,12 @@ export class CronService {
 
         await user.update({ last_reminder_sent: new Date() });
 
-        console.log(`✅ Reminder sent to ${user.name} (${type})`);
+        logger.info(`Reminder sent to ${user.name} (${type})`);
       } catch (error: any) {
-        console.error(
-          `❌ Failed to send reminder to ${user.name}:`,
-          error.message
-        );
+        logger.error(`Failed to send reminder to ${user.name}`, {
+          error: error.message,
+          type,
+        });
 
         await Reminder.create({
           client_id: (user as any).client_id,
@@ -167,15 +181,18 @@ export class CronService {
         const message = `Halo ${client.business_name},\n\nPeriode trial Anda telah berakhir. Mohon upgrade akun Anda untuk melanjutkan layanan.\n\nTerima kasih!`;
         try {
           await this.whatsappService.sendMessage(client.phone, message);
-        } catch (error) {
-          console.error(
-            `Failed to send trial expiry notice to ${client.business_name}`
+        } catch (error: any) {
+          logger.error(
+            `Failed to send trial expiry notice to ${client.business_name}`,
+            {
+              error: error.message,
+            }
           );
         }
       }
     }
 
-    console.log(`✅ Checked ${expiredTrialClients.length} trial expiry`);
+    logger.info(`Checked ${expiredTrialClients.length} trial expiry`);
   }
 
   private async checkOverdueInvoices() {
@@ -201,16 +218,19 @@ export class CronService {
           const message = `Halo ${client.business_name},\n\nInvoice ${invoice.invoice_number} sudah melewati jatuh tempo. Akun Anda telah disuspend. Mohon segera lakukan pembayaran.\n\nTerima kasih!`;
           try {
             await this.whatsappService.sendMessage(client.phone, message);
-          } catch (error) {
-            console.error(
-              `Failed to send overdue notice to ${client.business_name}`
+          } catch (error: any) {
+            logger.error(
+              `Failed to send overdue notice to ${client.business_name}`,
+              {
+                error: error.message,
+              }
             );
           }
         }
       }
     }
 
-    console.log(`✅ Checked ${overdueInvoices.length} overdue invoices`);
+    logger.info(`Checked ${overdueInvoices.length} overdue invoices`);
   }
 
   startAll() {

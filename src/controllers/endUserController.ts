@@ -7,6 +7,64 @@ import { formatPhone } from "../utils/helpers";
 
 const { EndUser, Client } = db;
 
+// Helper: Sanitize search input
+const sanitizeSearch = (input: string): string => {
+  return input.replace(/[%_\\]/g, "\\$&");
+};
+
+export const getEndUsers = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const clientId = req.user?.id;
+    const { status, search, page = 1, limit = 10 } = req.query;
+
+    const where: any = { client_id: clientId };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      const sanitized = sanitizeSearch(String(search));
+      where[Op.or] = [
+        { name: { [Op.like]: `%${sanitized}%` } },
+        { phone: { [Op.like]: `%${sanitized}%` } },
+      ];
+    }
+
+    // Limit max pagination
+    const maxLimit = 100;
+    const validLimit = Math.min(Number(limit), maxLimit);
+    const offset = (Number(page) - 1) * validLimit;
+
+    const { count, rows } = await EndUser.findAndCountAll({
+      where,
+      limit: validLimit,
+      offset,
+      order: [["created_at", "DESC"]],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        end_users: rows,
+        pagination: {
+          total: count,
+          page: Number(page),
+          limit: validLimit,
+          totalPages: Math.ceil(count / validLimit),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Other functions remain same...
 export const createEndUser = async (
   req: AuthRequest,
   res: Response,
@@ -35,61 +93,12 @@ export const createEndUser = async (
       due_date,
     });
 
-    // Update client total_users and monthly_bill
     await updateClientBilling(clientId!);
 
     res.status(201).json({
       success: true,
       message: "End user created successfully",
       data: endUser,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getEndUsers = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const clientId = req.user?.id;
-    const { status, search, page = 1, limit = 10 } = req.query;
-
-    const where: any = { client_id: clientId };
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (search) {
-      where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { phone: { [Op.like]: `%${search}%` } },
-      ];
-    }
-
-    const offset = (Number(page) - 1) * Number(limit);
-
-    const { count, rows } = await EndUser.findAndCountAll({
-      where,
-      limit: Number(limit),
-      offset,
-      order: [["created_at", "DESC"]],
-    });
-
-    res.json({
-      success: true,
-      data: {
-        end_users: rows,
-        pagination: {
-          total: count,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(count / Number(limit)),
-        },
-      },
     });
   } catch (error) {
     next(error);
@@ -146,8 +155,6 @@ export const updateEndUser = async (
     }
 
     await endUser.update(updateData);
-
-    // Update client billing if price changed
     await updateClientBilling(clientId!);
 
     res.json({
@@ -177,10 +184,7 @@ export const deleteEndUser = async (
       throw new AppError("End user not found", 404);
     }
 
-    // Soft delete: set status to inactive
     await endUser.update({ status: "inactive" });
-
-    // Update client billing
     await updateClientBilling(clientId!);
 
     res.json({
@@ -192,7 +196,6 @@ export const deleteEndUser = async (
   }
 };
 
-// Helper function
 async function updateClientBilling(clientId: number) {
   const activeUsers = await EndUser.count({
     where: {
