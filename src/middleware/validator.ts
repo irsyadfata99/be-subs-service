@@ -54,4 +54,21 @@ export const schemas = {
     due_date: Joi.date().optional().iso(),
     status: Joi.string().optional().valid("active", "overdue", "inactive"),
   }),
+
+  changePassword: Joi.object({
+    old_password: Joi.string().required().min(8),
+    new_password: Joi.string().required().min(8),
+    confirm_password: Joi.string()
+      .required()
+      .valid(Joi.ref("new_password"))
+      .messages({
+        "any.only": "Passwords do not match",
+      }),
+  }),
+
+  updateProfile: Joi.object({
+    business_name: Joi.string().optional().min(3).max(255),
+    phone: Joi.string().optional(),
+    logo_url: Joi.string().uri().optional().allow(""),
+  }),
 };

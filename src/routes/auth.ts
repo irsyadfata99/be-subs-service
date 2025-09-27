@@ -6,6 +6,9 @@ import { authLimiter } from "../middleware/rateLimiter";
 
 const router = express.Router();
 
+// Debug: Check what's exported
+console.log("AUTH CONTROLLER EXPORTS:", Object.keys(authController));
+
 router.post(
   "/register",
   authLimiter,
@@ -20,5 +23,22 @@ router.post(
 );
 router.get("/me", verifyToken, authController.getMe);
 router.post("/logout", verifyToken, authController.logout);
+
+// Phase 2 routes
+console.log("Registering /change-password route...");
+router.post(
+  "/change-password",
+  verifyToken,
+  validate(schemas.changePassword),
+  authController.changePassword
+);
+
+console.log("Registering /profile route...");
+router.put(
+  "/profile",
+  verifyToken,
+  validate(schemas.updateProfile),
+  authController.updateProfile
+);
 
 export default router;

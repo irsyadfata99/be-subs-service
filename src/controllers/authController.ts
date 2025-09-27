@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
-import jwt, { SignOptions } from "jsonwebtoken"; // ← Tambahkan SignOptions
+import jwt, { SignOptions } from "jsonwebtoken";
 import db from "../../models";
 import { AppError } from "../middleware/errorHandler";
 import { addDays } from "../utils/helpers";
@@ -36,14 +36,13 @@ export const register = async (
       trial_ends_at: trialEndsAt,
     });
 
-    // Fix JWT sign
     const token = jwt.sign(
       { id: client.id, email: client.email },
-      process.env.JWT_SECRET as string, // ← Cast to string
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" } as SignOptions // ← Cast SignOptions
+      process.env.JWT_SECRET as string,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" } as SignOptions
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Registration successful",
       data: {
@@ -80,14 +79,13 @@ export const login = async (
       throw new AppError("Invalid credentials", 401);
     }
 
-    // Fix JWT sign
     const token = jwt.sign(
       { id: client.id, email: client.email },
-      process.env.JWT_SECRET as string, // ← Cast to string
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" } as SignOptions // ← Cast SignOptions
+      process.env.JWT_SECRET as string,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" } as SignOptions
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Login successful",
       data: {
@@ -120,7 +118,7 @@ export const getMe = async (
       throw new AppError("Client not found", 404);
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: client,
     });
@@ -130,8 +128,79 @@ export const getMe = async (
 };
 
 export const logout = async (req: Request, res: Response) => {
-  res.json({
+  return res.json({
     success: true,
     message: "Logout successful",
   });
+};
+
+// PHASE 2: Change Password
+export const changePassword = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { old_password, new_password } = req.body;
+    const clientId = req.user?.id;
+
+    const client = await Client.findByPk(clientId);
+    if (!client) {
+      throw new AppError("Client not found", 404);
+    }
+
+    const isPasswordValid = await bcrypt.compare(old_password, client.password);
+    if (!isPasswordValid) {
+      throw new AppError("Current password is incorrect", 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    await client.update({ password: hashedPassword });
+
+    return res.json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PHASE 2: Update Profile
+export const updateProfile = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { business_name, phone, logo_url } = req.body;
+    const clientId = req.user?.id;
+
+    const client = await Client.findByPk(clientId);
+    if (!client) {
+      throw new AppError("Client not found", 404);
+    }
+
+    await client.update({
+      business_name: business_name || client.business_name,
+      phone: phone || client.phone,
+      logo_url: logo_url || client.logo_url,
+    });
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: client.id,
+        business_name: client.business_name,
+        business_type: client.business_type,
+        email: client.email,
+        phone: client.phone,
+        logo_url: client.logo_url,
+        status: client.status,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
