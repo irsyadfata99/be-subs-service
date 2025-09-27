@@ -14,25 +14,15 @@ export const generateMerchantRef = (): string => {
   return `MR-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-export const createTripaySignature = (
-  merchantCode: string,
-  merchantRef: string,
-  amount: number
-): string => {
+export const createTripaySignature = (merchantCode: string, merchantRef: string, amount: number): string => {
   const privateKey = process.env.TRIPAY_PRIVATE_KEY || "";
   const data = merchantCode + merchantRef + amount;
   return crypto.createHmac("sha256", privateKey).update(data).digest("hex");
 };
 
-export const validateTripayCallback = (
-  jsonBody: string,
-  signature: string
-): boolean => {
+export const validateTripayCallback = (jsonBody: string, signature: string): boolean => {
   const privateKey = process.env.TRIPAY_PRIVATE_KEY || "";
-  const calculatedSignature = crypto
-    .createHmac("sha256", privateKey)
-    .update(jsonBody)
-    .digest("hex");
+  const calculatedSignature = crypto.createHmac("sha256", privateKey).update(jsonBody).digest("hex");
   return calculatedSignature === signature;
 };
 
@@ -67,4 +57,10 @@ export const formatDate = (date: Date): string => {
     month: "long",
     year: "numeric",
   }).format(date);
+};
+
+export const addMonths = (date: Date, months: number): Date => {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
 };

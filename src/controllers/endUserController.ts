@@ -4,6 +4,7 @@ import db from "../../models";
 import { AppError } from "../middleware/errorHandler";
 import { AuthRequest } from "../middleware/auth";
 import { formatPhone } from "../utils/helpers";
+import { addMonths } from "../utils/helpers";
 
 const { EndUser, Client } = db;
 
@@ -12,11 +13,7 @@ const sanitizeSearch = (input: string): string => {
   return input.replace(/[%_\\]/g, "\\$&");
 };
 
-export const getEndUsers = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const getEndUsers = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const clientId = req.user?.id;
     const { status, search, page = 1, limit = 10 } = req.query;
@@ -29,10 +26,7 @@ export const getEndUsers = async (
 
     if (search) {
       const sanitized = sanitizeSearch(String(search));
-      where[Op.or] = [
-        { name: { [Op.like]: `%${sanitized}%` } },
-        { phone: { [Op.like]: `%${sanitized}%` } },
-      ];
+      where[Op.or] = [{ name: { [Op.like]: `%${sanitized}%` } }, { phone: { [Op.like]: `%${sanitized}%` } }];
     }
 
     // Limit max pagination
@@ -64,22 +58,135 @@ export const getEndUsers = async (
   }
 };
 
-// Other functions remain same...
-export const createEndUser = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const markAsPaid = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const clientId = req.user?.id;
+
+    const endUser = await EndUser.findOne({
+      where: { id, client_id: clientId },
+    });
+
+    if (!endUser) {
+      throw new AppError("End user not found", 404);
+    }
+
+    let nextDueDate: Date;
+
+    if (endUser.status === "overdue") {
+      nextDueDate = new Date(endUser.due_date);
+    } else {
+      nextDueDate = addMonths(new Date(endUser.due_date), 1);
+    }
+
+    await endUser.update({
+      status: "active",
+      due_date: nextDueDate,
+      payment_date: new Date(),
+      last_reminder_sent: new Date(),
+    });
+
+    await updateClientBilling(clientId!);
+
+    res.json({
+      success: true,
+      message: "Payment recorded successfully",
+      data: {
+        end_user: endUser,
+        next_due_date: nextDueDate,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkUpdateStatus = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const clientId = req.user?.id;
-    const {
-      name,
-      phone,
-      package_name,
-      package_price,
-      billing_cycle,
-      due_date,
-    } = req.body;
+    const { user_ids, action } = req.body;
+
+    if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+      throw new AppError("user_ids array is required", 400);
+    }
+
+    if (user_ids.length > 100) {
+      throw new AppError("Maximum 100 users per batch", 400);
+    }
+
+    if (!["mark_paid", "mark_overdue", "mark_inactive"].includes(action)) {
+      throw new AppError("Invalid action", 400);
+    }
+
+    const endUsers = await EndUser.findAll({
+      where: {
+        id: { [Op.in]: user_ids },
+        client_id: clientId,
+      },
+    });
+
+    if (endUsers.length === 0) {
+      throw new AppError("No users found", 404);
+    }
+
+    // FIX: Define proper type for results array
+    const results: Array<{
+      id: number;
+      name: string;
+      next_due_date?: Date;
+    }> = [];
+
+    for (const user of endUsers) {
+      if (action === "mark_paid") {
+        let nextDueDate: Date;
+
+        if (user.status === "overdue") {
+          nextDueDate = new Date(user.due_date);
+        } else {
+          nextDueDate = addMonths(new Date(user.due_date), 1);
+        }
+
+        await user.update({
+          status: "active",
+          due_date: nextDueDate,
+          payment_date: new Date(),
+          last_reminder_sent: new Date(),
+        });
+
+        results.push({
+          id: user.id,
+          name: user.name,
+          next_due_date: nextDueDate,
+        });
+      } else if (action === "mark_overdue") {
+        await user.update({ status: "overdue" });
+        results.push({ id: user.id, name: user.name });
+      } else if (action === "mark_inactive") {
+        await user.update({ status: "inactive" });
+        results.push({ id: user.id, name: user.name });
+      }
+    }
+
+    await updateClientBilling(clientId!);
+
+    res.json({
+      success: true,
+      message: `${endUsers.length} users updated successfully`,
+      data: {
+        updated_count: endUsers.length,
+        results,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Other functions remain same...
+export const createEndUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const clientId = req.user?.id;
+    const { name, phone, package_name, package_price, billing_cycle, due_date } = req.body;
 
     const formattedPhone = formatPhone(phone);
 
@@ -105,11 +212,7 @@ export const createEndUser = async (
   }
 };
 
-export const getEndUser = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const getEndUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const clientId = req.user?.id;
@@ -131,11 +234,7 @@ export const getEndUser = async (
   }
 };
 
-export const updateEndUser = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const updateEndUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const clientId = req.user?.id;
@@ -167,11 +266,7 @@ export const updateEndUser = async (
   }
 };
 
-export const deleteEndUser = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const deleteEndUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const clientId = req.user?.id;

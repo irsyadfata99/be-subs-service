@@ -5,8 +5,6 @@ import dotenv from "dotenv";
 import { errorHandler } from "./middleware/errorHandler";
 import { apiLimiter } from "./middleware/rateLimiter";
 import { requestLogger } from "./middleware/requestLogger";
-import { CronService } from "./services/cronService";
-import logger from "./utils/logger";
 
 // Import routes
 import authRoutes from "./routes/auth";
@@ -19,7 +17,6 @@ import dashboardRoutes from "./routes/dashboard";
 dotenv.config();
 
 const app: Application = express();
-const PORT = process.env.PORT || 5000;
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set("trust proxy", 1);
@@ -27,16 +24,12 @@ app.set("trust proxy", 1);
 // Security middleware
 app.use(
   helmet({
-    contentSecurityPolicy:
-      process.env.NODE_ENV === "production" ? undefined : false,
+    contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
   })
 );
 
 // CORS configuration
-const allowedOrigins =
-  process.env.NODE_ENV === "production"
-    ? [process.env.FRONTEND_URL || "https://yourdomain.com"]
-    : ["http://localhost:3000", "http://localhost:5173"];
+const allowedOrigins = process.env.NODE_ENV === "production" ? [process.env.FRONTEND_URL || "https://yourdomain.com"] : ["http://localhost:3000", "http://localhost:5173"];
 
 app.use(
   cors({
@@ -88,51 +81,5 @@ app.use((req, res) => {
 
 // Error handler (must be last)
 app.use(errorHandler);
-
-// Start cron jobs
-const cronService = new CronService();
-cronService.startAll();
-
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-  logger.info("SIGTERM received, closing server gracefully...");
-
-  // Close database connection
-  try {
-    const db = require("../models");
-    await db.sequelize.close();
-    logger.info("Database connection closed");
-  } catch (error) {
-    logger.error("Error closing database", { error });
-  }
-
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  logger.info("SIGINT received, closing server gracefully...");
-
-  try {
-    const db = require("../models");
-    await db.sequelize.close();
-    logger.info("Database connection closed");
-  } catch (error) {
-    logger.error("Error closing database", { error });
-  }
-
-  process.exit(0);
-});
-
-// Start server
-const server = app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || "development"}`);
-  logger.info(`API: http://localhost:${PORT}`);
-});
-
-// Handle unhandled rejections
-process.on("unhandledRejection", (reason: any) => {
-  logger.error("Unhandled Rejection:", { reason });
-});
 
 export default app;

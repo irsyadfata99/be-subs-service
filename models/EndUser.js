@@ -36,6 +36,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(50),
         defaultValue: "monthly",
       },
+      payment_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       due_date: {
         type: DataTypes.DATEONLY,
         allowNull: false,

@@ -1,0 +1,36 @@
+{
+  "info": {
+    "name": "Payment Reminder - Phase 1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Dynamic Platform Pricing",
+      "item": [
+        {
+          "name": "GET All Platforms",
+          "request": {
+            "method": "GET",
+            "url": "{{api_url}}/platforms"
+          }
+        },
+        {
+          "name": "UPDATE Platform Price",
+          "request": {
+            "method": "PUT",
+            "url": "{{api_url}}/platforms/{{platform_id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Netflix\",\"description\":\"Streaming service premium\",\"price_per_user\":60000}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

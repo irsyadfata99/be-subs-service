@@ -2,6 +2,7 @@ import { Op, Transaction } from "sequelize";
 import db from "../../models";
 import { TripayService } from "./tripayService";
 import { WhatsAppService } from "./whatsappService";
+import { PlatformSettingsService } from "./platformSettingsService"; // ADD THIS
 import { generateInvoiceNumber, addDays } from "../utils/helpers";
 import logger from "../utils/logger";
 
@@ -10,10 +11,12 @@ const { Client, EndUser, PlatformInvoice } = db;
 export class BillingService {
   private tripayService: TripayService;
   private whatsappService: WhatsAppService;
+  private settingsService: PlatformSettingsService;
 
   constructor() {
     this.tripayService = new TripayService();
     this.whatsappService = new WhatsAppService();
+    this.settingsService = new PlatformSettingsService();
   }
 
   async generateMonthlyInvoice(clientId: number): Promise<any> {
@@ -63,7 +66,7 @@ export class BillingService {
         return { message: "No active users, no invoice generated" };
       }
 
-      const pricePerUser = 3000;
+      const pricePerUser = await this.settingsService.getPricePerUser();
       const totalAmount = activeUsers * pricePerUser;
       const invoiceNumber = generateInvoiceNumber("PINV");
       const dueDate = addDays(now, 7);
@@ -119,13 +122,7 @@ export class BillingService {
       // Send WhatsApp (outside transaction)
       if (client.phone) {
         try {
-          await this.whatsappService.sendPlatformInvoice(
-            client.phone,
-            client.business_name,
-            invoiceNumber,
-            totalAmount,
-            tripayResponse.checkout_url
-          );
+          await this.whatsappService.sendPlatformInvoice(client.phone, client.business_name, invoiceNumber, totalAmount, tripayResponse.checkout_url);
         } catch (error: any) {
           logger.error("Failed to send WhatsApp invoice notification", {
             error: error.message,
