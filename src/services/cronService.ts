@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { Op } from "sequelize";
 import db from "../../models";
-import { WhatsAppService } from "./whatsappService.ts.backup";
+import { WhatsAppService } from "./whatsappService";
 import { BillingService } from "./billingService";
 import { LoggingService } from "./loggingService";
 import { addDays, formatDate } from "../utils/helpers";
@@ -43,10 +43,7 @@ export class CronService {
     }, 300000); // ✅ Every 5 minutes instead of 1 minute
   }
 
-  private async runJobWithLock(
-    jobName: string,
-    jobFunction: () => Promise<void>
-  ) {
+  private async runJobWithLock(jobName: string, jobFunction: () => Promise<void>) {
     if (this.jobLocks.get(jobName)) {
       logger.warn(`Job ${jobName} already running, skipping...`);
       return;
@@ -64,13 +61,7 @@ export class CronService {
     } catch (error: any) {
       logger.error(`Job ${jobName} failed`, { error: error.message });
 
-      await LoggingService.logError(
-        "cronService",
-        `${jobName} failed: ${error.message}`,
-        "error",
-        undefined,
-        error.stack
-      );
+      await LoggingService.logError("cronService", `${jobName} failed: ${error.message}`, "error", undefined, error.stack);
 
       if (jobLog) {
         await LoggingService.completeCronJob(jobLog.id, "failed", {
@@ -99,9 +90,7 @@ export class CronService {
       "0 9 * * *",
       async () => {
         logger.info("🔔 Running daily reminder job...");
-        await this.runJobWithLock("daily_reminders", () =>
-          this.sendAllReminders()
-        );
+        await this.runJobWithLock("daily_reminders", () => this.sendAllReminders());
       },
       { timezone: "Asia/Jakarta" }
     );
@@ -113,9 +102,7 @@ export class CronService {
       "0 9 * * *",
       async () => {
         logger.info("⚠️ Running trial warning job...");
-        await this.runJobWithLock("trial_warnings", () =>
-          this.sendTrialWarnings()
-        );
+        await this.runJobWithLock("trial_warnings", () => this.sendTrialWarnings());
       },
       { timezone: "Asia/Jakarta" }
     );
@@ -150,9 +137,7 @@ export class CronService {
           },
         });
 
-        logger.info(
-          `Found ${activeClients.length} clients to bill on date ${today}`
-        );
+        logger.info(`Found ${activeClients.length} clients to bill on date ${today}`);
 
         for (const client of activeClients) {
           try {
@@ -233,16 +218,12 @@ export class CronService {
         },
       });
 
-      logger.info(
-        `📢 Sending H-${days} trial warnings to ${clients.length} clients`
-      );
+      logger.info(`📢 Sending H-${days} trial warnings to ${clients.length} clients`);
 
       for (const client of clients) {
         try {
           if (!client.contact_whatsapp) {
-            logger.info(
-              `⏭️ Skipping ${client.business_name} (no WhatsApp number)`
-            );
+            logger.info(`⏭️ Skipping ${client.business_name} (no WhatsApp number)`);
             continue;
           }
 
@@ -266,26 +247,14 @@ export class CronService {
               client.billing_date
             );
 
-            logger.info(
-              `✅ Trial warning + invoice sent to ${client.business_name} (H-${days})`
-            );
+            logger.info(`✅ Trial warning + invoice sent to ${client.business_name} (H-${days})`);
           } else {
-            await this.whatsappService.sendTrialWarning(
-              client.contact_whatsapp,
-              client.business_name,
-              days,
-              parseFloat(client.monthly_bill.toString())
-            );
+            await this.whatsappService.sendTrialWarning(client.contact_whatsapp, client.business_name, days, parseFloat(client.monthly_bill.toString()));
 
-            logger.info(
-              `✅ Trial warning sent to ${client.business_name} (H-${days}) - Invoice not ready yet`
-            );
+            logger.info(`✅ Trial warning sent to ${client.business_name} (H-${days}) - Invoice not ready yet`);
           }
         } catch (error: any) {
-          logger.error(
-            `❌ Failed to send trial warning to ${client.business_name}`,
-            { error: error.message }
-          );
+          logger.error(`❌ Failed to send trial warning to ${client.business_name}`, { error: error.message });
         }
       }
     }
@@ -313,25 +282,19 @@ export class CronService {
         include: [{ model: Client, as: "client" }],
       });
 
-      logger.info(
-        `📤 Sending H-${days} invoice reminders for ${invoices.length} invoices`
-      );
+      logger.info(`📤 Sending H-${days} invoice reminders for ${invoices.length} invoices`);
 
       for (const invoice of invoices) {
         try {
           const client = (invoice as any).client;
           if (!client?.contact_whatsapp) {
-            logger.info(
-              `⏭️ Skipping invoice ${invoice.invoice_number} (no WhatsApp)`
-            );
+            logger.info(`⏭️ Skipping invoice ${invoice.invoice_number} (no WhatsApp)`);
             continue;
           }
 
           // ✅ FIX #1: Skip trial clients (already handled by trial warnings)
           if (client.status === "trial") {
-            logger.info(
-              `⏭️ Skipping ${client.business_name} (trial client already notified)`
-            );
+            logger.info(`⏭️ Skipping ${client.business_name} (trial client already notified)`);
             continue;
           }
 
@@ -346,9 +309,7 @@ export class CronService {
             client.billing_date
           );
 
-          logger.info(
-            `✅ Invoice reminder sent to ${client.business_name} (H-${days})`
-          );
+          logger.info(`✅ Invoice reminder sent to ${client.business_name} (H-${days})`);
         } catch (error: any) {
           logger.error(`❌ Failed to send invoice reminder`, {
             invoice: invoice.invoice_number,
@@ -387,13 +348,7 @@ export class CronService {
     } catch (error: any) {
       logger.error("Daily reminders failed", { error: error.message });
 
-      await LoggingService.logError(
-        "cronService",
-        `Daily reminders failed: ${error.message}`,
-        "error",
-        undefined,
-        error.stack
-      );
+      await LoggingService.logError("cronService", `Daily reminders failed: ${error.message}`, "error", undefined, error.stack);
 
       if (jobLog) {
         await LoggingService.completeCronJob(jobLog.id, "failed", {
@@ -437,16 +392,13 @@ export class CronService {
               phone: user.phone,
             };
 
-            const response = await this.whatsappService.sendPaymentReminder(
-              reminderData
-            );
+            const response = await this.whatsappService.sendPaymentReminder(reminderData);
 
             await Reminder.create({
               client_id: client.id,
               end_user_id: user.id,
               phone: user.phone,
-              message:
-                this.whatsappService.generateReminderMessage(reminderData),
+              message: this.whatsappService.generateReminderMessage(reminderData),
               type: type,
               status: "sent",
               response: response,
@@ -477,14 +429,8 @@ export class CronService {
       )
     );
 
-    const successful = results.filter(
-      (r) => r.status === "fulfilled" && (r.value as any).success
-    ).length;
-    const failed = results.filter(
-      (r) =>
-        r.status === "rejected" ||
-        (r.status === "fulfilled" && !(r.value as any).success)
-    ).length;
+    const successful = results.filter((r) => r.status === "fulfilled" && (r.value as any).success).length;
+    const failed = results.filter((r) => r.status === "rejected" || (r.status === "fulfilled" && !(r.value as any).success)).length;
     logger.info(`📊 ${type} summary: ${successful} sent, ${failed} failed`);
   }
 
@@ -492,10 +438,7 @@ export class CronService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const updated = await EndUser.update(
-      { status: "overdue" },
-      { where: { due_date: { [Op.lt]: today }, status: "active" } }
-    );
+    const updated = await EndUser.update({ status: "overdue" }, { where: { due_date: { [Op.lt]: today }, status: "active" } });
 
     logger.info(`✅ Updated ${updated[0]} users to overdue status`);
   }
@@ -519,15 +462,11 @@ export class CronService {
       },
     });
 
-    logger.info(
-      `📋 Found ${clientsNearingExpiry.length} clients with trial ending in 7 days`
-    );
+    logger.info(`📋 Found ${clientsNearingExpiry.length} clients with trial ending in 7 days`);
 
     for (const client of clientsNearingExpiry) {
       try {
-        const result = await this.billingService.generateOrGetTrialInvoice(
-          client.id
-        );
+        const result = await this.billingService.generateOrGetTrialInvoice(client.id);
 
         if (client.contact_whatsapp && result.invoice) {
           await this.whatsappService.sendTrialWarningWithInvoice(
@@ -563,24 +502,16 @@ export class CronService {
         await this.billingService.generateOrGetTrialInvoice(client.id);
 
         await client.update({ status: "suspended" });
-        logger.info(
-          `🚨 Client ${client.business_name} suspended (trial expired)`
-        );
+        logger.info(`🚨 Client ${client.business_name} suspended (trial expired)`);
 
         if (client.contact_whatsapp) {
           // ✅ FIX #6: Use softer message tone for trial expiry
-          await this.whatsappService.sendTrialExpired(
-            client.contact_whatsapp,
-            client.business_name
-          );
+          await this.whatsappService.sendTrialExpired(client.contact_whatsapp, client.business_name);
         }
       } catch (error: any) {
-        logger.error(
-          `❌ Failed to process trial expiry for ${client.business_name}`,
-          {
-            error: error.message,
-          }
-        );
+        logger.error(`❌ Failed to process trial expiry for ${client.business_name}`, {
+          error: error.message,
+        });
       }
     }
   }
@@ -609,11 +540,7 @@ export class CronService {
         logger.info(`🚨 Client ${client.business_name} SUSPENDED (overdue)`);
 
         if (client.contact_whatsapp) {
-          await this.whatsappService.sendAccountSuspended(
-            client.contact_whatsapp,
-            client.business_name,
-            "invoice belum dibayar"
-          );
+          await this.whatsappService.sendAccountSuspended(client.contact_whatsapp, client.business_name, "invoice belum dibayar");
         }
       }
     }

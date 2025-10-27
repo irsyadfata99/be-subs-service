@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { PlatformInvoice, Client } from "../../models";
 import logger from "../utils/logger";
-import { WhatsAppService } from "../services/whatsappService.ts.backup";
+import { WhatsAppService } from "../services/whatsappService";
 
 const whatsappService = new WhatsAppService();
 
@@ -13,10 +13,7 @@ export const handleTripayCallback = async (req: Request, res: Response) => {
 
     // Verify signature
     const privateKey = process.env.TRIPAY_PRIVATE_KEY || "";
-    const signature = crypto
-      .createHmac("sha256", privateKey)
-      .update(JSON.stringify(payload))
-      .digest("hex");
+    const signature = crypto.createHmac("sha256", privateKey).update(JSON.stringify(payload)).digest("hex");
 
     if (signature !== callbackSignature) {
       logger.warn("Invalid Tripay callback signature");
@@ -61,13 +58,7 @@ export const handleTripayCallback = async (req: Request, res: Response) => {
 
       // Send WhatsApp confirmation
       if (client.contact_whatsapp) {
-        await whatsappService.sendPaymentConfirmation(
-          client.contact_whatsapp,
-          client.business_name,
-          invoice.invoice_number,
-          invoice.total_amount,
-          new Date()
-        );
+        await whatsappService.sendPaymentConfirmation(client.contact_whatsapp, client.business_name, invoice.invoice_number, invoice.total_amount, new Date());
       }
 
       logger.info(`✅ Payment confirmed for invoice ${invoice.invoice_number}`);

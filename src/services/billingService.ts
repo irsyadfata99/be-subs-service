@@ -3,7 +3,7 @@ import db from "../../models";
 import axios from "axios";
 import crypto from "crypto";
 import { TripayService } from "./tripayService";
-import { WhatsAppService } from "./whatsappService.ts.backup";
+import { WhatsAppService } from "./whatsappService";
 import { PlatformSettingsService } from "./platformSettingsService";
 import { generateInvoiceNumber, addDays } from "../utils/helpers";
 import logger from "../utils/logger";
@@ -23,10 +23,7 @@ export class BillingService {
     this.tripayApiKey = process.env.TRIPAY_API_KEY || "";
     this.tripayPrivateKey = process.env.TRIPAY_PRIVATE_KEY || "";
     this.tripayMerchantCode = process.env.TRIPAY_MERCHANT_CODE || "";
-    this.tripayBaseUrl =
-      process.env.TRIPAY_MODE === "production"
-        ? "https://tripay.co.id/api"
-        : "https://tripay.co.id/api-sandbox";
+    this.tripayBaseUrl = process.env.TRIPAY_MODE === "production" ? "https://tripay.co.id/api" : "https://tripay.co.id/api-sandbox";
 
     this.tripayService = new TripayService();
     this.whatsappService = new WhatsAppService();
@@ -193,9 +190,7 @@ export class BillingService {
       sevenDaysFromNow.setDate(today.getDate() + 7);
       const targetBillingDate = sevenDaysFromNow.getDate();
 
-      logger.info(
-        `🔍 Checking for clients with billing date: ${targetBillingDate}`
-      );
+      logger.info(`🔍 Checking for clients with billing date: ${targetBillingDate}`);
 
       const clients = await Client.findAll({
         where: {
@@ -206,9 +201,7 @@ export class BillingService {
         },
       });
 
-      logger.info(
-        `📋 Found ${clients.length} clients for H-7 invoice generation`
-      );
+      logger.info(`📋 Found ${clients.length} clients for H-7 invoice generation`);
 
       for (const client of clients) {
         try {
@@ -226,9 +219,7 @@ export class BillingService {
           });
 
           if (existingInvoice) {
-            logger.info(
-              `⏭️ Invoice already exists for ${client.business_name} (${periodMonth}/${periodYear})`
-            );
+            logger.info(`⏭️ Invoice already exists for ${client.business_name} (${periodMonth}/${periodYear})`);
             continue;
           }
 
@@ -239,13 +230,10 @@ export class BillingService {
             totalAmount: result.invoice?.total_amount,
           });
         } catch (error: any) {
-          logger.error(
-            `❌ Failed to generate H-7 invoice for client ${client.id}`,
-            {
-              error: error.message,
-              businessName: client.business_name,
-            }
-          );
+          logger.error(`❌ Failed to generate H-7 invoice for client ${client.id}`, {
+            error: error.message,
+            businessName: client.business_name,
+          });
         }
       }
 
@@ -258,11 +246,7 @@ export class BillingService {
     }
   }
 
-  async createPaymentForInvoice(
-    invoiceId: number,
-    clientId: number,
-    paymentMethod: "BCA_VA" | "QRIS"
-  ): Promise<any> {
+  async createPaymentForInvoice(invoiceId: number, clientId: number, paymentMethod: "BCA_VA" | "QRIS"): Promise<any> {
     const t: Transaction = await db.sequelize.transaction();
 
     try {
@@ -292,9 +276,7 @@ export class BillingService {
         if (expiredTime > now) {
           if (invoice.payment_method_selected === paymentMethod) {
             await t.rollback();
-            logger.info(
-              `Payment already exists for invoice ${invoice.invoice_number}`
-            );
+            logger.info(`Payment already exists for invoice ${invoice.invoice_number}`);
             return {
               message: "Payment already exists and still valid",
               data: {
@@ -310,21 +292,14 @@ export class BillingService {
             };
           } else {
             await t.rollback();
-            throw new Error(
-              "Payment with different method already exists. Please cancel current payment first."
-            );
+            throw new Error("Payment with different method already exists. Please cancel current payment first.");
           }
         }
       }
 
-      logger.info(
-        `Creating ${paymentMethod} payment for invoice ${invoice.invoice_number}`
-      );
+      logger.info(`Creating ${paymentMethod} payment for invoice ${invoice.invoice_number}`);
 
-      const paymentData = await this.createTripayPayment(
-        invoiceId,
-        paymentMethod
-      );
+      const paymentData = await this.createTripayPayment(invoiceId, paymentMethod);
 
       await invoice.update(
         {
@@ -333,8 +308,7 @@ export class BillingService {
           tripay_merchant_ref: paymentData.merchant_ref,
           tripay_payment_url: paymentData.checkout_url,
           tripay_qr_url: paymentMethod === "QRIS" ? paymentData.qr_url : null,
-          tripay_va_number:
-            paymentMethod === "BCA_VA" ? paymentData.pay_code : null,
+          tripay_va_number: paymentMethod === "BCA_VA" ? paymentData.pay_code : null,
           tripay_expired_time: new Date(paymentData.expired_time * 1000),
         },
         { transaction: t }
@@ -342,9 +316,7 @@ export class BillingService {
 
       await t.commit();
 
-      logger.info(
-        `✅ Payment created for invoice ${invoice.invoice_number}: ${paymentMethod}`
-      );
+      logger.info(`✅ Payment created for invoice ${invoice.invoice_number}: ${paymentMethod}`);
 
       return {
         message: "Payment created successfully",
@@ -354,8 +326,7 @@ export class BillingService {
             tripay_reference: paymentData.reference,
             tripay_payment_url: paymentData.checkout_url,
             tripay_qr_url: paymentMethod === "QRIS" ? paymentData.qr_url : null,
-            tripay_va_number:
-              paymentMethod === "BCA_VA" ? paymentData.pay_code : null,
+            tripay_va_number: paymentMethod === "BCA_VA" ? paymentData.pay_code : null,
             tripay_expired_time: new Date(paymentData.expired_time * 1000),
           },
         },
@@ -371,10 +342,7 @@ export class BillingService {
     }
   }
 
-  async createTripayPayment(
-    invoiceId: number,
-    paymentMethod: "BCA_VA" | "QRIS"
-  ) {
+  async createTripayPayment(invoiceId: number, paymentMethod: "BCA_VA" | "QRIS") {
     try {
       const invoice = await PlatformInvoice.findByPk(invoiceId, {
         include: [{ model: Client, as: "client" }],
@@ -407,16 +375,12 @@ export class BillingService {
         signature: this.generateSignature(merchantRef, invoice.total_amount),
       };
 
-      const response = await axios.post(
-        `${this.tripayBaseUrl}/transaction/create`,
-        data,
-        {
-          headers: {
-            Authorization: `Bearer ${this.tripayApiKey}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await axios.post(`${this.tripayBaseUrl}/transaction/create`, data, {
+        headers: {
+          Authorization: `Bearer ${this.tripayApiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.data.success) {
         throw new Error(response.data.message || "Failed to create payment");
@@ -427,18 +391,13 @@ export class BillingService {
       return response.data.data;
     } catch (error: any) {
       logger.error("Tripay API error:", error.response?.data || error.message);
-      throw new Error(
-        error.response?.data?.message || "Failed to create Tripay payment"
-      );
+      throw new Error(error.response?.data?.message || "Failed to create Tripay payment");
     }
   }
 
   private generateSignature(merchantRef: string, amount: number): string {
     const data = `${this.tripayMerchantCode}${merchantRef}${amount}`;
-    return crypto
-      .createHmac("sha256", this.tripayPrivateKey)
-      .update(data)
-      .digest("hex");
+    return crypto.createHmac("sha256", this.tripayPrivateKey).update(data).digest("hex");
   }
 
   async regeneratePayment(invoiceId: number, clientId: number): Promise<any> {
@@ -461,24 +420,15 @@ export class BillingService {
         throw new Error("No payment method selected");
       }
 
-      const paymentData = await this.createTripayPayment(
-        invoiceId,
-        invoice.payment_method_selected as "BCA_VA" | "QRIS"
-      );
+      const paymentData = await this.createTripayPayment(invoiceId, invoice.payment_method_selected as "BCA_VA" | "QRIS");
 
       await invoice.update(
         {
           tripay_reference: paymentData.reference,
           tripay_merchant_ref: paymentData.merchant_ref,
           tripay_payment_url: paymentData.checkout_url,
-          tripay_qr_url:
-            invoice.payment_method_selected === "QRIS"
-              ? paymentData.qr_url
-              : null,
-          tripay_va_number:
-            invoice.payment_method_selected === "BCA_VA"
-              ? paymentData.pay_code
-              : null,
+          tripay_qr_url: invoice.payment_method_selected === "QRIS" ? paymentData.qr_url : null,
+          tripay_va_number: invoice.payment_method_selected === "BCA_VA" ? paymentData.pay_code : null,
           tripay_expired_time: new Date(paymentData.expired_time * 1000),
         },
         { transaction: t }
@@ -568,8 +518,7 @@ export class BillingService {
 
       // ✅ FIX #3: Send payment confirmation WhatsApp
       if (status === "PAID") {
-        const wasClientSuspended =
-          client.status === "suspended" || client.status === "trial";
+        const wasClientSuspended = client.status === "suspended" || client.status === "trial";
 
         if (wasClientSuspended) {
           await client.update({ status: "active" }, { transaction: t });
@@ -579,49 +528,28 @@ export class BillingService {
 
         // Send payment confirmation
         if (client.contact_whatsapp) {
-          await this.whatsappService.sendPaymentConfirmation(
-            client.contact_whatsapp,
-            client.business_name,
-            invoice.invoice_number,
-            parseFloat(invoice.total_amount.toString()),
-            new Date()
-          );
+          await this.whatsappService.sendPaymentConfirmation(client.contact_whatsapp, client.business_name, invoice.invoice_number, parseFloat(invoice.total_amount.toString()), new Date());
 
-          logger.info(
-            `✅ Payment confirmation sent to ${client.business_name}`
-          );
+          logger.info(`✅ Payment confirmation sent to ${client.business_name}`);
         }
 
         // ✅ FIX #12: Send reactivation notification if was suspended
         if (wasClientSuspended && client.contact_whatsapp) {
-          await this.whatsappService.sendAccountActivated(
-            client.contact_whatsapp,
-            client.business_name
-          );
+          await this.whatsappService.sendAccountActivated(client.contact_whatsapp, client.business_name);
 
-          logger.info(
-            `✅ Reactivation notification sent to ${client.business_name}`
-          );
+          logger.info(`✅ Reactivation notification sent to ${client.business_name}`);
         }
 
-        logger.info(
-          `✅ Payment confirmed for invoice ${invoice.invoice_number}`
-        );
+        logger.info(`✅ Payment confirmed for invoice ${invoice.invoice_number}`);
       }
       // ✅ FIX #11: Send payment expired notification
       else if (status === "EXPIRED") {
         await t.commit();
 
         if (client.contact_whatsapp) {
-          await this.whatsappService.sendPaymentExpired(
-            client.contact_whatsapp,
-            client.business_name,
-            invoice.invoice_number
-          );
+          await this.whatsappService.sendPaymentExpired(client.contact_whatsapp, client.business_name, invoice.invoice_number);
 
-          logger.info(
-            `⏰ Payment expired notification sent to ${client.business_name}`
-          );
+          logger.info(`⏰ Payment expired notification sent to ${client.business_name}`);
         }
 
         logger.info(`⏰ Payment expired for invoice ${invoice.invoice_number}`);

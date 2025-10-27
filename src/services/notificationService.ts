@@ -1,10 +1,9 @@
 import logger from "../utils/logger";
-import { WhatsAppService } from "./whatsappService.ts.backup";
+import { WhatsAppService } from "./whatsappService";
 
 export class NotificationService {
   private static whatsapp = new WhatsAppService();
-  private static adminNumbers =
-    process.env.ADMIN_WHATSAPP_NUMBERS?.split(",") || [];
+  private static adminNumbers = process.env.ADMIN_WHATSAPP_NUMBERS?.split(",") || [];
 
   /**
    * Notify admins of critical errors

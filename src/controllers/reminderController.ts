@@ -2,15 +2,11 @@ import { Response, NextFunction } from "express";
 import db from "../../models";
 import { AppError } from "../middleware/errorHandler";
 import { AuthRequest } from "../middleware/auth";
-import { WhatsAppService } from "../services/whatsappService.ts.backup";
+import { WhatsAppService } from "../services/whatsappService";
 
 const { Reminder, EndUser, Client } = db;
 
-export const getReminders = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const getReminders = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const clientId = req.user?.id;
     const { status, type, page = 1, limit = 20 } = req.query;
@@ -53,11 +49,7 @@ export const getReminders = async (
   }
 };
 
-export const sendManualReminder = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const sendManualReminder = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const clientId = req.user?.id;
     const { end_user_id, type } = req.body;
@@ -112,11 +104,7 @@ export const sendManualReminder = async (
   }
 };
 
-export const retryReminder = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const retryReminder = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const clientId = req.user?.id;
